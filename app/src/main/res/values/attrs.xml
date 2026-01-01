@@ -1,0 +1,3 @@
+<resources>
+    <attr name="myNotificationTextColor" format="color" />
+</resources>

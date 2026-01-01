@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    >
+
+    <!-- Title (like notification title) -->
+
+
+    <!-- Content (like notification content text) -->
+    <Chronometer
+        android:id="@+id/notification_timer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:paddingTop="4dp"
+        android:textSize="16sp"
+
+        android:format="%s" />
+    <TextView
+        android:id="@+id/notification_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Break running"
+        android:textSize="14sp"
+
+        />
+
+</LinearLayout>
