@@ -1,5 +1,6 @@
 package com.example.studytracker.ui.screens
 
+import android.R.attr.end
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
@@ -15,6 +16,7 @@ import com.example.studytracker.data.SessionWithTag
 import com.example.studytracker.data.TimerPreferencesRepository
 import com.example.studytracker.utils.createDateFromDay
 import com.example.studytracker.utils.formatMillisToDayMonthYear
+import com.example.studytracker.utils.getDayRange
 import com.example.studytracker.utils.getTodayRange
 import com.example.studytracker.utils.millisToYearMonth
 import kotlinx.coroutines.Dispatchers
@@ -85,6 +87,7 @@ class SessionViewModel(private val repository: SessionRepository, private val ti
 
 
 		val results = repository.getDailyDurationsForMonth(monthStart, monthEnd)
+		Log.d("month_shit2", "results: ${results}")
 
 
 		val map = results.associateBy { it.day.toInt() }
@@ -119,7 +122,23 @@ class SessionViewModel(private val repository: SessionRepository, private val ti
 	/** Fetch sessions for today */
 	@RequiresApi(Build.VERSION_CODES.O)
 	fun getTodaysSessions(): Flow<List<SessionWithTag>> {
-		val (start, end) = getTodayRange()  // your java.time util function
+	val (start, end) = getTodayRange()  // your java.time util function
+
+//		val (start, end) = getDayRange(LocalDate.now())
+		Log.d("month_shit2", "today range: ${start}, ${end}")
+
+
+		return repository.getSessionsForDayStream(start, end)
+	}
+
+	@RequiresApi(Build.VERSION_CODES.O)
+	fun getDaySessions(day : LocalDate): Flow<List<SessionWithTag>> {
+		val (start, end) = getDayRange(day) // your java.time util function
+
+		//		val (start, end) = getDayRange(LocalDate.now())
+		Log.d("month_shit2", "today range: ${start}, ${end}")
+
+
 		return repository.getSessionsForDayStream(start, end)
 	}
 

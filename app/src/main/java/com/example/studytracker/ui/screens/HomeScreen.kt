@@ -66,11 +66,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.studytracker.data.SessionWithTag
 import com.example.studytracker.ui.AppViewModelProvider
 import com.example.studytracker.ui.components.Dot
+import com.example.studytracker.ui.components.SessionCard
 import com.example.studytracker.ui.components.SummaryListItem
 import com.example.studytracker.ui.navigation.NavigationDestination
 import com.example.studytracker.ui.theme.Dimens
 import com.example.studytracker.ui.theme.ExtraTypography
 import com.example.studytracker.utils.formatSecondsToMMSS
+import com.example.studytracker.utils.formatSecondsToReadableTime
 import com.example.studytracker.utils.millisToTimeString
 import com.example.studytracker.utils.secondsToHoursMinutes
 import kotlinx.coroutines.launch
@@ -99,6 +101,10 @@ val coroutineScope = rememberCoroutineScope()
 	val sessionList: List<SessionWithTag> by sessionViewModel.getTodaysSessions().collectAsState(
 		emptyList()
 	)
+
+
+
+	Log.d("month_shit2", sessionList.toString())
 //todayStudyTime is in seconds
 	val todayStudyTime = sessionList.sumOf { it.session.duration }
 	val allSessions = sessionViewModel.allSessions.collectAsState().value
@@ -155,7 +161,9 @@ Scaffold (
 
 			if(sessionList.isNotEmpty()){
 				item {
-					TodaysSessionCard(sessionList = sessionList)
+//					TodaysSessionCard(sessionList = sessionList)
+
+					SessionCard(sessionList = sessionList, title = "TODAY'S SESSIONS")
 				}
 
 
@@ -284,10 +292,17 @@ fun SummeryCard(onStudyHistoryScreenClick: () -> Unit, todayStudyTime: Long, str
 //
 //	}
 //}
+
+
+
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun TodaysSessionCard(sessionList: List<SessionWithTag>, modifier: Modifier = Modifier) {
 	val sessionSize = sessionList.size
+	val totalSeconds = sessionList.sumOf { it.session.duration }
+
+	val hours = totalSeconds / 3600
+	val minutes = totalSeconds / 60
 
 
 	Card(colors = CardDefaults.cardColors(containerColor =
@@ -297,6 +312,10 @@ fun TodaysSessionCard(sessionList: List<SessionWithTag>, modifier: Modifier = Mo
 
 			Text("TODAY'S SESSIONS", style = MaterialTheme.typography.titleMedium, color = MaterialTheme
 				.colorScheme.primary)
+
+			Row {
+				Text("${sessionSize} sessions • ${formatSecondsToReadableTime(totalSeconds,true)}")
+			}
 			Column(verticalArrangement
 			= Arrangement.spacedBy(8.dp)) {
 				sessionList.forEachIndexed {index, sessionWithTag ->

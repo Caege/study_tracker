@@ -22,6 +22,25 @@ fun getTodayRange(): Pair<Long, Long> {
 	return startOfDay to endOfDay
 }
 
+// get any date range
+@RequiresApi(Build.VERSION_CODES.O)
+fun getDayRange(date: LocalDate): Pair<Long, Long> {
+	val zone = ZoneId.systemDefault()
+
+	val startOfDay = date
+		.atStartOfDay(zone)
+		.toInstant()
+		.toEpochMilli()
+
+	val endOfDay = date
+		.plusDays(1)
+		.atStartOfDay(zone)
+		.toInstant()
+		.toEpochMilli()
+
+	return startOfDay to endOfDay
+}
+
 
 @RequiresApi(Build.VERSION_CODES.O)
 fun getMillisForToday(hour: Int, minute: Int): Long {
@@ -113,7 +132,14 @@ fun formatSecondsToReadableTime(seconds: Long, short: Boolean = false): String {
 	val minutes = (seconds % 3600) / 60
 
 	return if (short) {
-		"${hours}h ${minutes}m"
+		 buildString {
+			if (hours > 0) append("${hours}h")
+			if (minutes > 0) {
+				if (isNotEmpty()) append(" ")
+				append("${minutes}m")
+			}
+			if (isEmpty()) append("0m") // when duration = 0
+		}
 	} else {
 		"${hours} hrs ${minutes} mins"
 	}

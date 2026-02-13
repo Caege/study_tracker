@@ -43,6 +43,8 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
@@ -60,17 +62,20 @@ import androidx.compose.material3.DatePickerFormatter
 import androidx.compose.material3.DatePickerState
 import androidx.compose.material3.DisplayMode
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -78,6 +83,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Alignment.Companion.CenterVertically
@@ -99,6 +105,7 @@ import com.example.studytracker.R
 import com.example.studytracker.data.DailyDurationDate
 import com.example.studytracker.ui.AppViewModelProvider
 import com.example.studytracker.ui.components.CardWrapperMedium
+import com.example.studytracker.ui.components.SessionCard
 import com.example.studytracker.ui.navigation.NavigationDestination
 import com.example.studytracker.ui.theme.Dimens
 import com.example.studytracker.utils.createDateFromDay
@@ -109,8 +116,10 @@ import com.example.studytracker.utils.formatSecondsToReadableTime
 import com.example.studytracker.utils.millisToYearMonth
 import com.google.protobuf.duration
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.time.DateTimeException
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Date
 
@@ -212,6 +221,8 @@ fun StudyHistoryScaffold(
 	//		)
 	//	}
 	val monthBreakDownDate = monthBreakDown
+
+	Log.d("testing", "monthBreakDownDate : ${monthBreakDownDate}")
 	val TOTAL_STUDY_TIME = monthBreakDownDate.sumOf { it.totalDuration }
 
 
@@ -242,11 +253,8 @@ fun StudyHistoryScaffold(
 		//				)
 		//			}
 		//		}
-
-
-
 		AnimatedVisibility(
-			visible = showDatePicker ,
+			visible = showDatePicker,
 			enter = fadeIn(animationSpec = tween(200)) + scaleIn(
 				initialScale = 0.8f, // start slightly smaller
 				animationSpec = tween(200, easing = FastOutSlowInEasing)
@@ -256,32 +264,27 @@ fun StudyHistoryScaffold(
 				animationSpec = tween(200, easing = FastOutSlowInEasing)
 			)
 		) {
-
-//				Box(modifier = Modifier.animateContentSize()) {
-//					AlertDialog(
-//						onDismissRequest = { showDatePicker = false },
-//						confirmButton = {
-//							TextButton(onClick = { showDatePicker = false }) {
-//								Text("OK")
-//							}
-//						},
-//						text = {
-//
-//								MaterialTheme {
-//									MyDatePicker(
-//										setMilli = { selectedMilli = it },
-//										closeDatePicker = { showDatePicker = false })
-//								}
-//
-//
-//						}
-//					)
-//				}
-
+			//				Box(modifier = Modifier.animateContentSize()) {
+			//					AlertDialog(
+			//						onDismissRequest = { showDatePicker = false },
+			//						confirmButton = {
+			//							TextButton(onClick = { showDatePicker = false }) {
+			//								Text("OK")
+			//							}
+			//						},
+			//						text = {
+			//
+			//								MaterialTheme {
+			//									MyDatePicker(
+			//										setMilli = { selectedMilli = it },
+			//										closeDatePicker = { showDatePicker = false })
+			//								}
+			//
+			//
+			//						}
+			//					)
+			//				}
 			MyDatePicker(setMilli = { selectedMilli = it }, closeDatePicker = { showDatePicker = false })
-
-
-
 		}
 
 
@@ -296,83 +299,110 @@ fun StudyHistoryScaffold(
 	}
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun StudyHistoryScreen(
 	modifier: Modifier,
 	totalStudy: Long,
-	dailyBreakDownList: List<DailyDurationDate>
+	dailyBreakDownList: List<DailyDurationDate>,
+	sessionViewModel: SessionViewModel =
+		viewModel(factory = AppViewModelProvider.Factory)
 ) {
 	val totalStudyToHours = totalStudy / 60 / 60
+	//set up bottom modal
+	var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
+	val sheetState = rememberModalBottomSheetState()
 
-	LazyColumn(
-		modifier = modifier
-			.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(24.dp)
-	) {
-		item {
-			Column(
-				//				modifier = modifier
-				//					.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)
-			) {
-				Card(
-					modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(
-						containerColor =
-							MaterialTheme.colorScheme.surfaceContainerLow
-					)
+	Box {
+		LazyColumn(
+			modifier = modifier
+				.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(24.dp)
+		) {
+			item {
+				Column(
+					//				modifier = modifier
+					//					.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)
 				) {
-					Column(
-						modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(
-							16
-								.dp
+					Card(
+						modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(
+							containerColor =
+								MaterialTheme.colorScheme.surfaceContainerLow
 						)
 					) {
-						//						Text("SUMMARY", style = MaterialTheme.typography.titleMedium)
-						Column() {
-							Text("Total hours studied this month")
+						Column(
+							modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(
+								16
+									.dp
+							)
+						) {
+							//						Text("SUMMARY", style = MaterialTheme.typography.titleMedium)
+							Column() {
+								Text("Total hours studied this month")
 
-							Text(
-								buildAnnotatedString {
-									withStyle(style = SpanStyle(fontSize = 24.sp,  fontWeight = FontWeight.Bold)) {
-										append("${totalStudyToHours} ")
-									}
-									withStyle(style = SpanStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold)) {
-										append("hours")
-									}
-									//									withStyle(style = SpanStyle(fontSize = 24.sp)) {
-									//										append("${mins} ")
-									//									}
-									//
-									//									withStyle(style = SpanStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold)) {
-									//										append("mins ")
-									//									}
-								})
-							//							Text("${totalStudyToHours} hours")
+								Text(
+									buildAnnotatedString {
+										withStyle(style = SpanStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold)) {
+											append("${totalStudyToHours} ")
+										}
+										withStyle(style = SpanStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold)) {
+											append("hours")
+										}
+										//									withStyle(style = SpanStyle(fontSize = 24.sp)) {
+										//										append("${mins} ")
+										//									}
+										//
+										//									withStyle(style = SpanStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold)) {
+										//										append("mins ")
+										//									}
+									})
+								//							Text("${totalStudyToHours} hours")
+							}
 						}
 					}
 				}
 			}
-		}
 
-		if (dailyBreakDownList.isNotEmpty()) {
-			item {
-				CardWrapperMedium {
-					DailyBreakDownCard(dailyBreakDownList = dailyBreakDownList)
+			if (dailyBreakDownList.isNotEmpty()) {
+				item {
+					CardWrapperMedium {
+						DailyBreakDownCard(dailyBreakDownList = dailyBreakDownList, onDateClick = {
+							selectedDate = it
+						})
+					}
+				}
+			} else {
+				item {
+					CardWrapperMedium {
+						EmptyStudyListUI()
+					}
 				}
 			}
-		} else {
-			item {
-				CardWrapperMedium {
-					EmptyStudyListUI()
+		}
+		//bottom sheet
+		if (selectedDate != null) {
+			ModalBottomSheet(
+				onDismissRequest = { selectedDate = null },
+				sheetState = sheetState
+			) {
+				selectedDate?.let {
+					val sessionList by sessionViewModel.getDaySessions(it).collectAsState(emptyList())
+					SessionCard(sessionList, formatLocalDate(it))
 				}
 			}
 		}
 	}
 
+
 }
 
+// Responsible for displaying each daily session
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun DailyBreakDownCard(dailyBreakDownList: List<DailyDurationDate>) {
+fun DailyBreakDownCard(
+	dailyBreakDownList: List<DailyDurationDate>, onDateClick: (LocalDate) ->
+	Unit
+) {
 	Text(
 		"DAILY BREAKDOWN", style = MaterialTheme.typography.titleMedium, color = MaterialTheme
 			.colorScheme.primary
@@ -382,20 +412,30 @@ fun DailyBreakDownCard(dailyBreakDownList: List<DailyDurationDate>) {
 	Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
 		val listSize = dailyBreakDownList.size
 		dailyBreakDownList.forEachIndexed { index, item ->
-			DailyBreakDownItem(dailyBreakDown = item, last = listSize - 1 == index)
+			DailyBreakDownItem(dailyBreakDown = item, onDateClick, last = listSize - 1 == index)
 		}
 	}
 }
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun DailyBreakDownItem(dailyBreakDown: DailyDurationDate, last: Boolean) {
-	Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-		Row(modifier = Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+fun DailyBreakDownItem(
+	dailyBreakDown: DailyDurationDate, onDateClick: (LocalDate) -> Unit, last:
+	Boolean
+) {
+	var showBottomSheet by remember { mutableStateOf(false) }
+	Column(
+		verticalArrangement = Arrangement.spacedBy(8.dp),
+	) {
+		Row(
+			modifier = Modifier.fillMaxWidth(), Arrangement.SpaceBetween, verticalAlignment =
+				Alignment.CenterVertically
+		) {
 			Row(
 				verticalAlignment = CenterVertically,
 				horizontalArrangement = Arrangement.spacedBy(16.dp)
 			) {
+				Log.d("testing", dailyBreakDown.toString())
 				Box(
 					modifier = Modifier
 						.size(18.dp)
@@ -420,17 +460,53 @@ fun DailyBreakDownItem(dailyBreakDown: DailyDurationDate, last: Boolean) {
 				}
 			}
 
-			Icon(
-				Icons.AutoMirrored.Default.ArrowForward, contentDescription = null, modifier =
-					Modifier
-						.size(24.dp)
-			)
+			IconButton(onClick = { onDateClick(dailyBreakDown.day) }) {
+				Icon(
+					Icons.Default.KeyboardArrowDown, contentDescription = null, modifier =
+						Modifier
+							.size(24.dp)
+				)
+			}
 		}
+
+
 		if (!last) {
 			HorizontalDivider(thickness = 2.dp)
 		}
 	}
 
+
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BottomSheetForSummary(showBottomSheet: Boolean) {
+	val sheetState = rememberModalBottomSheetState()
+	val scope = rememberCoroutineScope()
+	var showBottomSheet by remember { mutableStateOf(false) }
+	Scaffold(
+	) { contentPadding ->
+		// Screen content
+		if (showBottomSheet) {
+			ModalBottomSheet(
+				onDismissRequest = {
+					showBottomSheet = false
+				},
+				sheetState = sheetState
+			) {
+				// Sheet content
+				Button(onClick = {
+					scope.launch { sheetState.hide() }.invokeOnCompletion {
+						if (!sheetState.isVisible) {
+							showBottomSheet = false
+						}
+					}
+				}) {
+					Text("Hide bottom sheet")
+				}
+			}
+		}
+	}
 }
 
 //@OptIn(ExperimentalMaterial3Api::class)
@@ -518,7 +594,6 @@ fun DailyBreakDownItem(dailyBreakDown: DailyDurationDate, last: Boolean) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MyDatePicker(setMilli: (Long) -> Unit, closeDatePicker: () -> Unit) {
-
 	val datePickerState = rememberDatePickerState(initialSelectedDateMillis = currentMilli())
 
 	DatePickerDialog(
