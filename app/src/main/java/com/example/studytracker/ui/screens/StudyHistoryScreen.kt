@@ -383,7 +383,8 @@ fun StudyHistoryScreen(
 		if (selectedDate != null) {
 			ModalBottomSheet(
 				onDismissRequest = { selectedDate = null },
-				sheetState = sheetState
+				sheetState = sheetState,
+				scrimColor = Color.Black.copy(alpha = 0.6f)
 			) {
 				selectedDate?.let {
 					val sessionList by sessionViewModel.getDaySessions(it).collectAsState(emptyList())
@@ -424,90 +425,68 @@ fun DailyBreakDownItem(
 	Boolean
 ) {
 	var showBottomSheet by remember { mutableStateOf(false) }
-	Column(
-		verticalArrangement = Arrangement.spacedBy(8.dp),
-	) {
-		Row(
-			modifier = Modifier.fillMaxWidth(), Arrangement.SpaceBetween, verticalAlignment =
-				Alignment.CenterVertically
+
+		Column(
+			verticalArrangement = Arrangement.spacedBy(8.dp),
+			modifier =
+				Modifier.clickable {
+					onDateClick(dailyBreakDown.day)
+				}
 		) {
 			Row(
-				verticalAlignment = CenterVertically,
-				horizontalArrangement = Arrangement.spacedBy(16.dp)
+				modifier = Modifier.fillMaxWidth(), Arrangement.SpaceBetween, verticalAlignment =
+					Alignment.CenterVertically
 			) {
-				Log.d("testing", dailyBreakDown.toString())
-				Box(
-					modifier = Modifier
-						.size(18.dp)
-						.clip(CircleShape)
-						.background(MaterialTheme.colorScheme.primary)
-				)
-				Column(verticalArrangement = Arrangement.spacedBy(Dimens.MediumPadding)) {
-					Row(horizontalArrangement = Arrangement.spacedBy(Dimens.MediumPadding)) {
-						Icon(
-							painter = painterResource(R.drawable.event_24), contentDescription = null, modifier =
-								Modifier
-									.size(24.dp)
+				Row(
+					verticalAlignment = CenterVertically,
+					horizontalArrangement = Arrangement.spacedBy(16.dp)
+				) {
+					Log.d("testing", dailyBreakDown.toString())
+					Box(
+						modifier = Modifier
+							.size(18.dp)
+							.clip(CircleShape)
+							.background(MaterialTheme.colorScheme.primary)
+					)
+					Column(verticalArrangement = Arrangement.spacedBy(Dimens.MediumPadding), ) {
+						Row(horizontalArrangement = Arrangement.spacedBy(Dimens.MediumPadding)) {
+							Icon(
+								painter = painterResource(R.drawable.event_24), contentDescription = null, modifier =
+									Modifier
+										.size(24.dp)
+							)
+
+							Text(formatLocalDate(dailyBreakDown.day))
+						}
+
+						Text(
+							formatSecondsToReadableTime(dailyBreakDown.totalDuration), modifier = Modifier
+								.offset(x = 8.dp)
 						)
-
-						Text(formatLocalDate(dailyBreakDown.day))
 					}
+				}
 
-					Text(
-						formatSecondsToReadableTime(dailyBreakDown.totalDuration), modifier = Modifier
-							.offset(x = 8.dp)
+				IconButton(onClick = { onDateClick(dailyBreakDown.day) }) {
+					Icon(
+						Icons.Default.KeyboardArrowDown, contentDescription = null, modifier =
+							Modifier
+								.size(24.dp)
 					)
 				}
 			}
 
-			IconButton(onClick = { onDateClick(dailyBreakDown.day) }) {
-				Icon(
-					Icons.Default.KeyboardArrowDown, contentDescription = null, modifier =
-						Modifier
-							.size(24.dp)
-				)
+
+			if (!last) {
+				HorizontalDivider(thickness = 2.dp)
 			}
 		}
 
 
-		if (!last) {
-			HorizontalDivider(thickness = 2.dp)
-		}
-	}
 
 
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun BottomSheetForSummary(showBottomSheet: Boolean) {
-	val sheetState = rememberModalBottomSheetState()
-	val scope = rememberCoroutineScope()
-	var showBottomSheet by remember { mutableStateOf(false) }
-	Scaffold(
-	) { contentPadding ->
-		// Screen content
-		if (showBottomSheet) {
-			ModalBottomSheet(
-				onDismissRequest = {
-					showBottomSheet = false
-				},
-				sheetState = sheetState
-			) {
-				// Sheet content
-				Button(onClick = {
-					scope.launch { sheetState.hide() }.invokeOnCompletion {
-						if (!sheetState.isVisible) {
-							showBottomSheet = false
-						}
-					}
-				}) {
-					Text("Hide bottom sheet")
-				}
-			}
-		}
-	}
-}
+
 
 //@OptIn(ExperimentalMaterial3Api::class)
 //@Composable
