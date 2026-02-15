@@ -111,6 +111,9 @@ val coroutineScope = rememberCoroutineScope()
 val streak = sessionViewModel.streakStatsFlow.collectAsState().value.streak
 
 	val past7days = sessionViewModel.streakStatsFlow.collectAsState().value.past7DaysTotalSeconds.toInt()
+	Log.d("past7", "all session : ${sessionViewModel.allSessions.collectAsState().value.toString()}", )
+	Log.d("past7", "7 days : ${sessionViewModel.streakStatsFlow.collectAsState().value
+		.past7DaysTotalSeconds.toInt()}", )
 //sessionViewModel.changeStudyGoal(1)
 
 	// studyGoal returns hrs so convert to seconds

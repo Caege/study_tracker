@@ -5,6 +5,7 @@ import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.input.key.Key.Companion.D
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.studytracker.data.DailyDuration
@@ -20,13 +21,19 @@ import com.example.studytracker.utils.getDayRange
 import com.example.studytracker.utils.getTodayRange
 import com.example.studytracker.utils.millisToYearMonth
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -36,26 +43,27 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 
-class SessionViewModel(private val repository: SessionRepository, private val timerPreferencesRepository: TimerPreferencesRepository) : ViewModel
-																																													() {
-
+@RequiresApi(Build.VERSION_CODES.O)
+class SessionViewModel(
+	private val repository: SessionRepository,
+	private val timerPreferencesRepository: TimerPreferencesRepository
+) : ViewModel
+			() {
 	private val _monthBreakdown = MutableStateFlow<List<DailyDurationDate>>(emptyList())
-	val monthBreakdown: StateFlow<List<DailyDurationDate>> = _monthBreakdown.asStateFlow()
+	//MutableStateFlow<List<DailyDurationDate>>
+	//StateFlow<UiState<List<Breakdown>>>
 
+	private val _tempMonthBreakdown = MutableStateFlow<UiState<List<DailyDurationDate>>>(UiState.Loading)
+	val tempMonthBreakDown : StateFlow<UiState<List<DailyDurationDate>>> = _tempMonthBreakdown.asStateFlow()
+
+	val monthBreakdown: StateFlow<List<DailyDurationDate>> = _monthBreakdown.asStateFlow()
 	private val _past7days = MutableStateFlow<Int>(0)
 	val past7days: StateFlow<Int> = _past7days
-
-
-	private val _studyGoal = timerPreferencesRepository.studyGoal.stateIn(viewModelScope,
-		SharingStarted.WhileSubscribed(5000),0)
-
+	private val _studyGoal = timerPreferencesRepository.studyGoal.stateIn(
+		viewModelScope,
+		SharingStarted.WhileSubscribed(5000), 0
+	)
 	val studyGoal = _studyGoal
-
-	private val dailyGoalHours = _studyGoal.value
-
-
-
-
 
 
 	// Expose tags as StateFlow for UI
@@ -71,60 +79,81 @@ class SessionViewModel(private val repository: SessionRepository, private val ti
 		started = SharingStarted.WhileSubscribed(5_000),
 		initialValue = emptyList()
 	)
-
+	val tempAllSession = repository.getSessionWithTagStream()
+	val tempStudyGoal = timerPreferencesRepository.studyGoal
 	val monthBreakDownDate = MutableStateFlow<List<DailyDurationDate>>(emptyList())
 
-
-/** FOR STUDY HISTORY SCREEN */
+	/** FOR STUDY HISTORY SCREEN */
 	@RequiresApi(Build.VERSION_CODES.O)
-	fun loadMonthBreakdown(milli : Long) {
-	//		Log.d("month_shit", "selected month, ${month}")
-	val month = millisToYearMonth(milli)
-	viewModelScope.launch {
-		val monthStart = month.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-		val monthEnd =
-			month.plusMonths(1).atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-
-
-		val results = repository.getDailyDurationsForMonth(monthStart, monthEnd)
-		Log.d("month_shit2", "results: ${results}")
-
-
-		val map = results.associateBy { it.day.toInt() }
+	fun loadMonthBreakdown(milli: Long) {
+		//		Log.d("month_shit", "selected month, ${month}")
+		val month = millisToYearMonth(milli)
+		viewModelScope.launch {
+			val monthStart =
+				month.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+			val monthEnd =
+				month.plusMonths(1).atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+			val results = repository.getDailyDurationsForMonth(monthStart, monthEnd)
+			Log.d("month_shit2", "results: ${results}")
+			val map = results.associateBy { it.day.toInt() }
 
 
 
-		Log.d("month_shit", "month start: ${formatMillisToDayMonthYear(monthStart)}, month end : ${monthEnd}")
-
-		_monthBreakdown.value = (1..month.lengthOfMonth()).map { day ->
-			map[day] ?: DailyDuration(day.toString().padStart(2, '0'), 0)
-		}.filter { it.totalDuration > 0 }.map {
-			Log.d("month_shit", "loop day : ${it.day}")
-			DailyDurationDate(
-				day = createDateFromDay(
-					it.day,
-					referenceMillis = milli
-				), totalDuration = it.totalDuration
+			Log.d(
+				"month_shit",
+				"month start: ${formatMillisToDayMonthYear(monthStart)}, month end : ${monthEnd}"
 			)
+
+			_monthBreakdown.value = (1..month.lengthOfMonth()).map { day ->
+				map[day] ?: DailyDuration(day.toString().padStart(2, '0'), 0)
+			}.filter { it.totalDuration > 0 }.map {
+				Log.d("month_shit", "loop day : ${it.day}")
+				DailyDurationDate(
+					day = createDateFromDay(
+						it.day,
+						referenceMillis = milli
+					), totalDuration = it.totalDuration
+				)
+			}
+
+			val result = (1..month.lengthOfMonth()).map { day ->
+				map[day] ?: DailyDuration(day.toString().padStart(2, '0'), 0)
+			}.filter { it.totalDuration > 0 }.map {
+				Log.d("month_shit", "loop day : ${it.day}")
+				DailyDurationDate(
+					day = createDateFromDay(
+						it.day,
+						referenceMillis = milli
+					), totalDuration = it.totalDuration
+				)
+			}
+
+			if(result.isEmpty()) {
+				_tempMonthBreakdown.value = UiState.Success(emptyList())
+			} else {
+				_tempMonthBreakdown.value = UiState.Success(result)
+			}
 		}
+
+
+
 	}
 
-	Log.d("month_shit", monthBreakdown.toString())
-
-}
-
-
+	init {
+		_monthBreakdown
+			.onEach { goal ->
+				Log.d("month_test", "goal updated = $goal")
+			}
+			.launchIn(viewModelScope)
+	}
 	/** Fetch a tag with all its sessions */
 	//	fun getTagWithSessions(tagId: Int): Flow<SessionWithTag?> =
 	//		repository.getTagWithSessionsStream(tagId)
-
-
 	/** Fetch sessions for today */
 	@RequiresApi(Build.VERSION_CODES.O)
 	fun getTodaysSessions(): Flow<List<SessionWithTag>> {
-	val (start, end) = getTodayRange()  // your java.time util function
-
-//		val (start, end) = getDayRange(LocalDate.now())
+		val (start, end) = getTodayRange()  // your java.time util function
+		//		val (start, end) = getDayRange(LocalDate.now())
 		Log.d("month_shit2", "today range: ${start}, ${end}")
 
 
@@ -132,9 +161,8 @@ class SessionViewModel(private val repository: SessionRepository, private val ti
 	}
 
 	@RequiresApi(Build.VERSION_CODES.O)
-	fun getDaySessions(day : LocalDate): Flow<List<SessionWithTag>> {
+	fun getDaySessions(day: LocalDate): Flow<List<SessionWithTag>> {
 		val (start, end) = getDayRange(day) // your java.time util function
-
 		//		val (start, end) = getDayRange(LocalDate.now())
 		Log.d("month_shit2", "today range: ${start}, ${end}")
 
@@ -158,22 +186,18 @@ class SessionViewModel(private val repository: SessionRepository, private val ti
 		}
 	}
 
+	@OptIn(ExperimentalCoroutinesApi::class)
 	@RequiresApi(Build.VERSION_CODES.O)
 	val streakStatsFlow: StateFlow<StreakStats> =
-		allSessions // Flow<List<SessionWithTag>>
-			.map { sessions ->
-				withContext(Dispatchers.Default) {
-					calculateStats(sessions, dailyGoalHours)
-				}
-			}
+		//we use combine to observe when each flow changes and run some code
+		combine(tempAllSession, tempStudyGoal) { sessions, goal ->
+			calculateStats(sessions, goal)
+		}
 			.stateIn(
 				viewModelScope,
 				SharingStarted.WhileSubscribed(5000),
 				StreakStats(0, 0L)
 			)
-
-
-
 
 	@RequiresApi(Build.VERSION_CODES.O)
 	private fun calculateStats(
@@ -182,88 +206,90 @@ class SessionViewModel(private val repository: SessionRepository, private val ti
 	): StreakStats {
 		val zoneId = ZoneId.systemDefault()
 		val dailyGoalSeconds = dailyGoalHours * 3600
-
 		// Group sessions by day
 		val sessionsByDate = sessions.groupBy { swt ->
 			Instant.ofEpochMilli(swt.session.startTime).atZone(zoneId).toLocalDate()
 		}
-
 		// Calculate daily totals
 		val dailyTotals = sessionsByDate.mapValues { (_, dailySessions) ->
 			dailySessions.sumOf { it.session.duration }
 		}
-
 		// Past 7 days total
 		val today = LocalDate.now(zoneId)
 		val last7Days = (0..6).map { today.minusDays(it.toLong()) }
 		val totalSeconds = last7Days.sumOf { dailyTotals[it] ?: 0L }
-
 		// Streak calculation
 		var streak = 0
 		var currentDate = today
+
+
 		while (true) {
 			val total = dailyTotals[currentDate] ?: 0L
+
+			if (dailyGoalHours == 0) break
+			//if this never becomes false, we will loop forever 💀
 			if (total >= dailyGoalSeconds) {
 				streak++
 				currentDate = currentDate.minusDays(1)
-			} else break
+			}
+			// lmao
+			else break
 		}
 
 		return StreakStats(streak, totalSeconds)
 	}
-//
-//	@RequiresApi(Build.VERSION_CODES.O)
-//	suspend fun calculateStreak(
-//		sessions: List<SessionWithTag>,
-//		dailyGoalHours: Int
-//	): Int = withContext(Dispatchers.Default) {
-//		val zoneId = ZoneId.systemDefault()
-//		val dailyGoalSeconds = dailyGoalHours * 3600
-//
-//		// Step 1: Group sessions by day
-//		val sessionsByDate = sessions.groupBy { swt ->
-//			Instant.ofEpochMilli(swt.session.startTime).atZone(zoneId).toLocalDate()
-//		}
-//		Log.d("7days", sessionsByDate.toString())
-//
-//		// Step 2: Calculate total duration per day
-//		val dailyTotals = sessionsByDate.mapValues { (_, dailySessions) ->
-//			dailySessions.sumOf { it.session.duration }
-//		}
-//		Log.d("7days", dailyTotals.toString())
-//
-//		// Calculate total seconds for last 7 days
-//		val today = LocalDate.now(zoneId)
-//		val last7Days = (0..6).map { today.minusDays(it.toLong()) }
-//		val totalSeconds = last7Days.sumOf { dailyTotals[it] ?: 0L }
-//
-//		// safely post value on main thread
-//		withContext(Dispatchers.Main) {
-//			_past7days.value = totalSeconds.toInt()
-//		}
-//
-//		// Step 3: Count streak backwards from today
-//		var streak = 0
-//		var currentDate = today
-//
-//		while (true) {
-//			val total = dailyTotals[currentDate] ?: 0L
-//			if (total >= dailyGoalSeconds) {
-//				streak++
-//				currentDate = currentDate.minusDays(1)
-//			} else {
-//				break // stop streak when a day fails
-//			}
-//		}
-//
-//		streak
-//	}
 
-
+	//
+	//	@RequiresApi(Build.VERSION_CODES.O)
+	//	suspend fun calculateStreak(
+	//		sessions: List<SessionWithTag>,
+	//		dailyGoalHours: Int
+	//	): Int = withContext(Dispatchers.Default) {
+	//		val zoneId = ZoneId.systemDefault()
+	//		val dailyGoalSeconds = dailyGoalHours * 3600
+	//
+	//		// Step 1: Group sessions by day
+	//		val sessionsByDate = sessions.groupBy { swt ->
+	//			Instant.ofEpochMilli(swt.session.startTime).atZone(zoneId).toLocalDate()
+	//		}
+	//		Log.d("7days", sessionsByDate.toString())
+	//
+	//		// Step 2: Calculate total duration per day
+	//		val dailyTotals = sessionsByDate.mapValues { (_, dailySessions) ->
+	//			dailySessions.sumOf { it.session.duration }
+	//		}
+	//		Log.d("7days", dailyTotals.toString())
+	//
+	//		// Calculate total seconds for last 7 days
+	//		val today = LocalDate.now(zoneId)
+	//		val last7Days = (0..6).map { today.minusDays(it.toLong()) }
+	//		val totalSeconds = last7Days.sumOf { dailyTotals[it] ?: 0L }
+	//
+	//		// safely post value on main thread
+	//		withContext(Dispatchers.Main) {
+	//			_past7days.value = totalSeconds.toInt()
+	//		}
+	//
+	//		// Step 3: Count streak backwards from today
+	//		var streak = 0
+	//		var currentDate = today
+	//
+	//		while (true) {
+	//			val total = dailyTotals[currentDate] ?: 0L
+	//			if (total >= dailyGoalSeconds) {
+	//				streak++
+	//				currentDate = currentDate.minusDays(1)
+	//			} else {
+	//				break // stop streak when a day fails
+	//			}
+	//		}
+	//
+	//		streak
+	//	}
 	// change study goal
-	fun changeStudyGoal(hrs : Int) {
-
+	fun changeStudyGoal(hrs: Int) {
 		viewModelScope.launch {
+			Log.d("past7shit", "study goal changed")
 			timerPreferencesRepository.changeStudyGoal(hrs)
 		}
 
@@ -271,8 +297,15 @@ class SessionViewModel(private val repository: SessionRepository, private val ti
 
 }
 
-
 data class StreakStats(
 	val streak: Int,
 	val past7DaysTotalSeconds: Long
 )
+
+
+//Ui States for Summery Screen
+sealed class UiState<out T> {
+	object Loading : UiState<Nothing>()
+	data class Success<T>(val data: T) : UiState<T>()
+	data class Error(val message: String) : UiState<Nothing>()
+}
